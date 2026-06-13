@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RunTrack">
+<link rel="manifest" href="manifest.json">
+<title>RunTrack</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg2: #1e293b;
+    --bg3: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #22d3ee;
+    --accent2: #0ea5e9;
+    --green: #4ade80;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --radius: 16px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Header */
+  .header { padding: 14px 20px 10px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .header-actions { display: flex; gap: 10px; }
+  .icon-btn { background: var(--bg2); border: none; color: var(--muted); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: background 0.2s; }
+  .icon-btn:active { background: var(--bg3); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; padding: 0 16px 10px; flex-shrink: 0; }
+  .tab { flex: 1; padding: 8px; border-radius: 10px; border: none; background: var(--bg2); color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .tab.active { background: var(--accent); color: #0f172a; }
+
+  /* Content */
+  .screen { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* === TRACK SCREEN === */
+  #map { flex: 1; width: 100%; z-index: 0; }
+  .map-overlay { position: relative; flex-shrink: 0; }
+  .stats-strip { background: var(--bg); padding: 14px 16px 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+  .stat-val.accent { color: var(--accent); }
+  .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+
+  .controls { padding: 12px 16px 20px; display: flex; gap: 10px; align-items: center; background: var(--bg); }
+  .btn-main { flex: 1; height: 52px; border-radius: 26px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.15s; letter-spacing: 0.3px; }
+  .btn-start { background: var(--accent); color: #0f172a; }
+  .btn-pause { background: var(--amber); color: #0f172a; }
+  .btn-stop { background: var(--red); color: #fff; }
+  .btn-lap { background: var(--bg2); color: var(--text); width: 52px; height: 52px; flex: none; border-radius: 50%; border: none; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-main:active { opacity: 0.85; transform: scale(0.97); }
+
+  /* Status bar */
+  .status-bar { padding: 6px 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); background: var(--bg); border-top: 1px solid var(--bg3); }
+  .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .gps-dot.good { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .gps-dot.searching { background: var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* === HISTORY SCREEN === */
+  .history-list { flex: 1; overflow-y: auto; padding: 8px 16px 20px; }
+  .run-card { background: var(--bg2); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; cursor: pointer; transition: background 0.2s; }
+  .run-card:active { background: var(--bg3); }
+  .run-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .run-date { font-size: 15px; font-weight: 600; }
+  .run-type { font-size: 11px; background: var(--bg3); color: var(--muted); padding: 3px 8px; border-radius: 20px; }
+  .run-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .run-metric { }
+  .run-metric .val { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .run-metric .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); padding: 40px; text-align: center; }
+  .empty-icon { font-size: 48px; opacity: 0.3; }
+
+  /* === STATS SCREEN === */
+  .stats-scroll { flex: 1; overflow-y: auto; padding: 8px 16px 20px; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 16px 0 10px; }
+  .metric-card { background: var(--bg2); border-radius: var(--radius); padding: 16px; margin-bottom: 10px; }
+  .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--bg3); }
+  .metric-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .metric-name { font-size: 14px; color: var(--muted); }
+  .metric-value { font-size: 16px; font-weight: 700; }
+  .bar-wrap { background: var(--bg3); border-radius: 4px; height: 6px; flex: 1; margin: 0 12px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 1s ease; }
+  .weekly-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
+  .day-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .day-bar-wrap { height: 60px; display: flex; align-items: flex-end; }
+  .day-bar { width: 24px; border-radius: 4px 4px 0 0; background: var(--bg3); transition: height 0.8s ease; min-height: 4px; }
+  .day-bar.active { background: var(--accent); }
+  .day-label { font-size: 10px; color: var(--muted); }
+  .big-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .big-stat-card { background: var(--bg2); border-radius: var(--radius); padding: 16px; }
+  .big-stat-val { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -1px; }
+  .big-stat-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .big-stat-delta { font-size: 11px; color: var(--green); margin-top: 6px; }
+
+  /* Lap table */
+  .lap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lap-table th { color: var(--muted); font-weight: 500; padding: 6px 0; text-align: left; border-bottom: 1px solid var(--bg3); }
+  .lap-table td { padding: 8px 0; border-bottom: 1px solid var(--bg3); }
+  .lap-table tr:last-child td { border-bottom: none; }
+  .lap-best { color: var(--accent); font-weight: 700; }
+
+  /* Detail modal */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: none; align-items: flex-end; }
+  .modal.open { display: flex; }
+  .modal-sheet { background: var(--bg); border-radius: 20px 20px 0 0; width: 100%; max-height: 85dvh; overflow-y: auto; padding: 20px; }
+  .modal-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--bg3); margin: 0 auto 16px; }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+  .close-btn { float: right; background: var(--bg2); border: none; color: var(--muted); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; line-height: 32px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Run<span>Track</span></div>
+  <div class="header-actions">
+    <button class="icon-btn" onclick="showSettings()" title="Settings">⚙️</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('track', this)">Track</button>
+  <button class="tab" onclick="switchTab('history', this)">History</button>
+  <button class="tab" onclick="switchTab('stats', this)">Stats</button>
+</div>
+
+<!-- TRACK SCREEN -->
+<div id="screen-track" class="screen active">
+  <div id="map"></div>
+  <div class="status-bar">
+    <div class="gps-dot" id="gpsDot"></div>
+    <span id="gpsStatus">Waiting for GPS…</span>
+  </div>
+  <div class="stats-strip">
+    <div class="stat"><div class="stat-val accent" id="liveKm">0.00</div><div class="stat-lbl">km</div></div>
+    <div class="stat"><div class="stat-val" id="liveTime">00:00</div><div class="stat-lbl">duration</div></div>
+    <div class="stat"><div class="stat-val" id="livePace">--:--</div><div class="stat-lbl">min/km</div></div>
+    <div class="stat"><div class="stat-val" id="liveKcal">0</div><div class="stat-lbl">kcal</div></div>
+  </div>
+  <div class="controls">
+    <button class="btn-lap" id="lapBtn" onclick="recordLap()" style="display:none">LAP</button>
+    <button class="btn-main btn-start" id="mainBtn" onclick="toggleRun()">Start Run</button>
+  </div>
+</div>
+
+<!-- HISTORY SCREEN -->
+<div id="screen-history" class="screen">
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<!-- STATS SCREEN -->
+<div id="screen-stats" class="screen">
+  <div class="stats-scroll" id="statsScroll"></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal" id="detailModal" onclick="closeModal(event)">
+  <div class="modal-sheet" id="modalSheet">
+    <div class="modal-handle"></div>
+    <button class="close-btn" onclick="closeModalBtn()">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const WEIGHT_KG = 70; // default, settable
+let state = {
+  running: false, paused: false,
+  startTime: null, elapsed: 0, lapStart: 0,
+  distance: 0, positions: [], laps: [],
+  watchId: null, timerInterval: null,
+  lastPos: null, lastElevation: null, elevGain: 0, elevLoss: 0
+};
+
+// ── Storage ────────────────────────────────────────────────────────────────
+function getSessions() {
+  try { return JSON.parse(localStorage.getItem('rt_sessions') || '[]'); } catch { return []; }
+}
+function saveSession(s) {
+  const sessions = getSessions();
+  sessions.unshift(s);
+  localStorage.setItem('rt_sessions', JSON.stringify(sessions.slice(0, 100)));
+}
+
+// ── Map setup ──────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([20.5937, 78.9629], 15);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
+L.control.attribution({ prefix: '© OpenStreetMap © CARTO', position: 'bottomright' }).addTo(map);
+let routeLine = null, posMarker = null;
+
+function updateMap(lat, lng) {
+  const ll = [lat, lng];
+  if (!posMarker) {
+    posMarker = L.circleMarker(ll, { radius: 10, fillColor: '#22d3ee', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map);
+  } else { posMarker.setLatLng(ll); }
+  map.panTo(ll, { animate: true });
+}
+
+function updateRoute() {
+  const pts = state.positions.map(p => [p.lat, p.lng]);
+  if (!routeLine) {
+    routeLine = L.polyline(pts, { color: '#22d3ee', weight: 4, opacity: 0.9 }).addTo(map);
+  } else { routeLine.setLatLngs(pts); }
+}
+
+// ── Calculations ───────────────────────────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function calcCalories(km, seconds) {
+  const MET = 9.8;
+  return Math.round(MET * WEIGHT_KG * (seconds / 3600));
+}
+
+function formatTime(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatPace(km, seconds) {
+  if (km < 0.01) return '--:--';
+  const paceSeconds = seconds / km;
+  const m = Math.floor(paceSeconds / 60), s = Math.floor(paceSeconds % 60);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function formatDate(ts) {
+  return new Date(ts).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+// ── GPS & Run logic ────────────────────────────────────────────────────────
+function startGPS() {
+  document.getElementById('gpsDot').className = 'gps-dot searching';
+  document.getElementById('gpsStatus').textContent = 'Acquiring GPS…';
+  state.watchId = navigator.geolocation.watchPosition(onPosition, onGpsError, {
+    enableHighAccuracy: true, maximumAge: 1000, timeout: 10000
+  });
+}
+
+function stopGPS() {
+  if (state.watchId !== null) { navigator.geolocation.clearWatch(state.watchId); state.watchId = null; }
+}
+
+function onPosition(pos) {
+  const { latitude: lat, longitude: lng, altitude, accuracy } = pos.coords;
+  document.getElementById('gpsDot').className = 'gps-dot good';
+  document.getElementById('gpsStatus').textContent = `GPS ±${Math.round(accuracy)}m`;
+  updateMap(lat, lng);
+
+  if (!state.running || state.paused) return;
+
+  if (state.lastPos) {
+    const dist = haversine(state.lastPos.lat, state.lastPos.lng, lat, lng);
+    if (dist > 2 && dist < 200) { // filter noise & teleports
+      state.distance += dist / 1000;
+    }
+  }
+
+  // Elevation
+  if (altitude !== null && state.lastElevation !== null) {
+    const diff = altitude - state.lastElevation;
+    if (diff > 0.5) state.elevGain += diff;
+    else if (diff < -0.5) state.elevLoss += Math.abs(diff);
+  }
+  if (altitude !== null) state.lastElevation = altitude;
+
+  state.lastPos = { lat, lng };
+  state.positions.push({ lat, lng, t: Date.now() });
+  updateRoute();
+  updateLiveStats();
+}
+
+function onGpsError(err) {
+  document.getElementById('gpsDot').className = 'gps-dot';
+  document.getElementById('gpsStatus').textContent = `GPS error: ${err.message}`;
+}
+
+function getElapsed() {
+  if (!state.startTime) return state.elapsed;
+  return state.elapsed + (Date.now() - state.startTime) / 1000;
+}
+
+function updateLiveStats() {
+  const elapsed = getElapsed();
+  document.getElementById('liveKm').textContent = state.distance.toFixed(2);
+  document.getElementById('liveTime').textContent = formatTime(elapsed);
+  document.getElementById('livePace').textContent = formatPace(state.distance, elapsed);
+  document.getElementById('liveKcal').textContent = calcCalories(state.distance, elapsed);
+}
+
+function toggleRun() {
+  if (!state.running) {
+    // Start
+    state.running = true; state.paused = false;
+    state.startTime = Date.now(); state.elapsed = 0;
+    state.distance = 0; state.positions = []; state.laps = [];
+    state.elevGain = 0; state.elevLoss = 0; state.lastElevation = null;
+    startGPS();
+    state.timerInterval = setInterval(updateLiveStats, 1000);
+    document.getElementById('mainBtn').textContent = 'Pause';
+    document.getElementById('mainBtn').className = 'btn-main btn-pause';
+    document.getElementById('lapBtn').style.display = '';
+    if (routeLine) { routeLine.remove(); routeLine = null; }
+  } else if (!state.paused) {
+    // Pause
+    state.paused = true;
+    state.elapsed += (Date.now() - state.startTime) / 1000;
+    state.startTime = null;
+    document.getElementById('mainBtn').textContent = 'Resume';
+    document.getElementById('mainBtn').className = 'btn-main btn-start';
+    document.getElementById('lapBtn').textContent = 'END';
+    document.getElementById('lapBtn').onclick = endRun;
+  } else {
+    // Resume
+    state.paused = false;
+    state.startTime = Date.now();
+    document.getElementById('mainBtn').textContent = 'Pause';
+    document.getElementById('mainBtn').className = 'btn-main btn-pause';
+    document.getElementById('lapBtn').textContent = 'LAP';
+    document.getElementById('lapBtn').onclick = recordLap;
+  }
+}
+
+function recordLap() {
+  const elapsed = getElapsed();
+  const lapElapsed = elapsed - state.lapStart;
+  const lapDist = state.distance - (state.laps.reduce((s, l) => s + l.dist, 0));
+  state.laps.push({ n: state.laps.length + 1, time: lapElapsed, dist: lapDist });
+  state.lapStart = elapsed;
+}
+
+function endRun() {
+  if (!state.running) return;
+  state.running = false;
+  clearInterval(state.timerInterval);
+  stopGPS();
+  const elapsed = getElapsed();
+  const session = {
+    id: Date.now(), ts: Date.now(),
+    distance: state.distance, duration: elapsed,
+    kcal: calcCalories(state.distance, elapsed),
+    pace: state.distance > 0.01 ? elapsed / state.distance : 0,
+    elevGain: Math.round(state.elevGain), elevLoss: Math.round(state.elevLoss),
+    positions: state.positions.slice(0, 500), laps: state.laps
+  };
+  saveSession(session);
+  state.elapsed = 0; state.startTime = null;
+  document.getElementById('mainBtn').textContent = 'Start Run';
+  document.getElementById('mainBtn').className = 'btn-main btn-start';
+  document.getElementById('lapBtn').style.display = 'none';
+  document.getElementById('lapBtn').textContent = 'LAP';
+  document.getElementById('lapBtn').onclick = recordLap;
+  updateLiveStats();
+  showRunSummary(session);
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const sessions = getSessions();
+  const el = document.getElementById('historyList');
+  if (!sessions.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏃</div><p>No runs yet.<br>Start tracking to see your history here.</p></div>`;
+    return;
+  }
+  el.innerHTML = sessions.map(s => `
+    <div class="run-card" onclick="showRunSummary(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+      <div class="run-header">
+        <div class="run-date">${formatDate(s.ts)}</div>
+        <div class="run-type">Run</div>
+      </div>
+      <div class="run-metrics">
+        <div class="run-metric"><div class="val">${s.distance.toFixed(2)}</div><div class="lbl">km</div></div>
+        <div class="run-metric"><div class="val">${formatTime(s.duration)}</div><div class="lbl">duration</div></div>
+        <div class="run-metric"><div class="val">${formatPace(s.distance, s.duration)}</div><div class="lbl">min/km</div></div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Stats Screen ───────────────────────────────────────────────────────────
+function renderStats() {
+  const sessions = getSessions();
+  const el = document.getElementById('statsScroll');
+  if (!sessions.length) {
+    el.innerHTML = `<div class="empty-state" style="padding-top:60px"><div class="empty-icon">📊</div><p>Complete your first run to see stats!</p></div>`;
+    return;
+  }
+  const totalKm = sessions.reduce((s, r) => s + r.distance, 0);
+  const totalTime = sessions.reduce((s, r) => s + r.duration, 0);
+  const totalKcal = sessions.reduce((s, r) => s + r.kcal, 0);
+  const bestPace = sessions.filter(s => s.distance > 0.5).reduce((best, s) => {
+    const p = s.duration / s.distance;
+    return p < best ? p : best;
+  }, Infinity);
+  const avgKm = totalKm / sessions.length;
+
+  // Weekly bars
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = ['S','M','T','W','T','F','S'];
+  const weeklyDist = Array(7).fill(0);
+  sessions.forEach(s => {
+    const sDate = new Date(s.ts); sDate.setHours(0,0,0,0);
+    const diff = Math.round((today - sDate) / 86400000);
+    if (diff >= 0 && diff < 7) weeklyDist[6 - diff] += s.distance;
+  });
+  const maxDist = Math.max(...weeklyDist, 1);
+  const dayOfWeek = today.getDay();
+  const weekLabels = Array(7).fill(0).map((_,i) => days[(dayOfWeek - 6 + i + 7) % 7]);
+  const weekBars = weeklyDist.map((d, i) => {
+    const h = Math.max(4, Math.round((d / maxDist) * 60));
+    return `<div class="day-col">
+      <div class="day-bar-wrap"><div class="day-bar ${d > 0 ? 'active' : ''}" style="height:${h}px"></div></div>
+      <div class="day-label">${weekLabels[i]}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="section-title">This week</div>
+    <div class="metric-card">
+      <div class="weekly-grid">${weekBars}</div>
+    </div>
+
+    <div class="section-title">All time</div>
+    <div class="big-stat-grid">
+      <div class="big-stat-card">
+        <div class="big-stat-val">${totalKm.toFixed(1)}</div>
+        <div class="big-stat-lbl">total km</div>
+      </div>
+      <div class="big-stat-card">
+        <div class="big-stat-val">${sessions.length}</div>
+        <div class="big-stat-lbl">runs</div>
+      </div>
+      <div class="big-stat-card">
+        <div class="big-stat-val">${formatTime(totalTime)}</div>
+        <div class="big-stat-lbl">total time</div>
+      </div>
+      <div class="big-stat-card">
+        <div class="big-stat-val">${Math.round(totalKcal).toLocaleString()}</div>
+        <div class="big-stat-lbl">kcal burned</div>
+      </div>
+    </div>
+
+    <div class="section-title">Personal bests</div>
+    <div class="metric-card">
+      <div class="metric-row">
+        <span class="metric-name">Best pace</span>
+        <span class="metric-value" style="color:var(--accent)">${bestPace === Infinity ? '--' : formatPace(1, bestPace)}/km</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-name">Avg distance</span>
+        <span class="metric-value">${avgKm.toFixed(2)} km</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-name">Longest run</span>
+        <span class="metric-value">${Math.max(...sessions.map(s=>s.distance)).toFixed(2)} km</span>
+      </div>
+    </div>
+  `;
+}
+
+// ── Run Summary Modal ──────────────────────────────────────────────────────
+function showRunSummary(session) {
+  const s = typeof session === 'string' ? JSON.parse(session) : session;
+  const lapRows = s.laps && s.laps.length ? s.laps.map((l, i) => {
+    const pace = formatPace(l.dist, l.time);
+    return `<tr><td>${l.n}</td><td>${l.dist.toFixed(2)} km</td><td>${formatTime(l.time)}</td><td class="${i===0?'lap-best':''}">${pace}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" style="color:var(--muted);font-size:13px">No laps recorded</td></tr>';
+
+  document.getElementById('modalContent').innerHTML = `
+    <div class="modal-title">Run Summary</div>
+    <div class="modal-sub">${formatDate(s.ts)}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      <div class="big-stat-card"><div class="big-stat-val">${s.distance.toFixed(2)}</div><div class="big-stat-lbl">km</div></div>
+      <div class="big-stat-card"><div class="big-stat-val">${formatTime(s.duration)}</div><div class="big-stat-lbl">duration</div></div>
+      <div class="big-stat-card"><div class="big-stat-val">${formatPace(s.distance, s.duration)}</div><div class="big-stat-lbl">avg pace</div></div>
+      <div class="big-stat-card"><div class="big-stat-val">${s.kcal}</div><div class="big-stat-lbl">kcal</div></div>
+      <div class="big-stat-card"><div class="big-stat-val">↑${s.elevGain||0}m</div><div class="big-stat-lbl">elevation gain</div></div>
+      <div class="big-stat-card"><div class="big-stat-val">${s.distance > 0 ? (s.distance / (s.duration/3600)).toFixed(1) : '0'}</div><div class="big-stat-lbl">avg km/h</div></div>
+    </div>
+    <div class="section-title">Laps</div>
+    <div class="metric-card">
+      <table class="lap-table">
+        <thead><tr><th>Lap</th><th>Dist</th><th>Time</th><th>Pace</th></tr></thead>
+        <tbody>${lapRows}</tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function closeModal(e) { if (e.target.id === 'detailModal') closeModalBtn(); }
+function closeModalBtn() { document.getElementById('detailModal').classList.remove('open'); }
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`screen-${name}`).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'stats') renderStats();
+  if (name === 'track') setTimeout(() => map.invalidateSize(), 50);
+}
+
+function showSettings() {
+  const w = parseFloat(prompt('Enter your weight (kg) for accurate calorie tracking:', WEIGHT_KG));
+  if (!isNaN(w) && w > 0) { Object.assign(window, { WEIGHT_KG: w }); alert('Weight updated!'); }
+}
+
+// Init
+if ('geolocation' in navigator) {
+  navigator.geolocation.getCurrentPosition(pos => {
+    map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+    updateMap(pos.coords.latitude, pos.coords.longitude);
+    document.getElementById('gpsDot').className = 'gps-dot good';
+    document.getElementById('gpsStatus').textContent = `GPS ready ±${Math.round(pos.coords.accuracy)}m`;
+  }, () => {
+    document.getElementById('gpsStatus').textContent = 'Enable location to track runs';
+  }, { enableHighAccuracy: true });
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
