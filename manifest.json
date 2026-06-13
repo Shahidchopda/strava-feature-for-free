@@ -1,18 +1,19 @@
 {
-  "name": "RunTrack",
+  "name": "RunTrack – GPS Run Tracker",
   "short_name": "RunTrack",
-  "description": "GPS run tracker with pace, distance, calories & elevation",
+  "description": "GPS run tracker with live map, pace, calories & route replay",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#f8f9fb",
+  "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230f172a'/><text y='130' x='24' font-size='120' font-family='system-ui'>🏃</text></svg>",
+      "src": "icon.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["fitness", "health", "sports"]
+  "categories": ["fitness","health","sports"]
 }
